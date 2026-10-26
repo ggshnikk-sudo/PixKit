@@ -1,0 +1,28 @@
+[package]
+name = "pixkit"
+version = "0.1.0"
+edition = "2024"
+description = "PixKit — кросс-платформенный конвертер изображений (GUI + CLI)"
+license = "MIT"
+
+[[bin]]
+name = "pixkit"
+path = "src/main.rs"
+
+[[bin]]
+name = "pixkit-cli"
+path = "src/bin/pixkit-cli.rs"
+
+[dependencies]
+eframe = "0.36"
+image = { version = "0.25", default-features = false, features = ["gif", "png", "webp", "jpeg", "bmp", "tiff"] }
+png = "0.18"
+rfd = "0.17"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_Foundation"] }
+
+[profile.release]
+strip = true
+lto = "thin"
+opt-level = 2

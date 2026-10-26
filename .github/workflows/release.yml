@@ -1,0 +1,91 @@
+name: Release
+
+# Every pushed tag (v0.1.0, 0.1.0, ...) publishes a GitHub release with the
+# release builds for each platform. Source archives (zip / tar.gz) are attached
+# by GitHub itself for every release, so they are not re-uploaded here.
+on:
+  push:
+    tags:
+      - "**"
+  # Manual re-run for a tag that already exists (e.g. after a failed build).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+            ext: ".exe"
+          # Native arm64 runner: no cross-compilation, so the GUI dependencies
+          # resolve against the target architecture.
+          - os: ubuntu-latest
+            name: linux-x64
+            ext: ""
+          - os: ubuntu-24.04-arm
+            name: linux-arm64
+            ext: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked --bins
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          EXT="${{ matrix.ext }}"
+          cp "target/release/pixkit$EXT" "dist/pixkit-${{ matrix.name }}$EXT"
+          cp "target/release/pixkit-cli$EXT" "dist/pixkit-cli-${{ matrix.name }}$EXT"
+          ls -l dist
+
+      - name: Upload build
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixkit-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download builds
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -l dist
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/*
